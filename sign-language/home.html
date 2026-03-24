@@ -1,0 +1,1895 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SignSense ML – Hybrid ASL Detection</title>
+
+<!-- MediaPipe Hands -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<!-- TensorFlow.js -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+
+<!-- React -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+
+<style>
+:root{
+  --bg:#07090f;
+  --surface:#0e1120;
+  --surface2:#141828;
+  --surface3:#1a1f30;
+  --border:#1e2538;
+  --border2:#2a3050;
+  --accent:#4f8ef7;
+  --accent-glow:rgba(79,142,247,0.22);
+  --accent2:#a78bfa;
+  --accent3:#34d399;
+  --warn:#f59e0b;
+  --danger:#f87171;
+  --text:#e8eaf6;
+  --text2:#8b93b8;
+  --text3:#4a5180;
+  --card:#0f1220;
+  --radius:16px;
+  --radius-sm:10px;
+  --font-head:'Syne',sans-serif;
+  --font-body:'DM Sans',sans-serif;
+  --conf-hi:#34d399;
+  --conf-mid:#4f8ef7;
+  --conf-lo:#f59e0b;
+  --conf-vlo:#f87171;
+  /* ML-specific colors */
+  --ml-color:#a78bfa;
+  --rule-color:#34d399;
+  --collect-color:#f59e0b;
+}
+.hc{
+  --bg:#000;--surface:#111;--surface2:#1a1a1a;--surface3:#222;
+  --border:#444;--border2:#666;
+  --accent:#ffe600;--accent2:#ff6bff;--accent3:#00ffb3;
+  --text:#fff;--text2:#ddd;--text3:#aaa;--card:#111;
+  --accent-glow:rgba(255,230,0,0.2);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font-body);overflow:hidden}
+#root{height:100%}
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:var(--surface)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+
+.app{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:210px;min-width:210px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:16px 10px;gap:2px;z-index:10;flex-shrink:0}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.topbar{display:flex;align-items:center;gap:12px;padding:10px 20px;border-bottom:1px solid var(--border);background:var(--surface);min-height:52px;flex-shrink:0}
+.content{flex:1;overflow-y:auto;padding:16px 18px;overflow-x:hidden}
+
+.logo{display:flex;align-items:center;gap:9px;margin-bottom:16px;padding:0 4px}
+.logo-icon{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.logo-text{font-family:var(--font-head);font-size:18px;font-weight:800;letter-spacing:-.5px}
+.logo-text span{color:var(--accent)}
+.nav-sec{font-size:10px;font-weight:600;color:var(--text3);letter-spacing:1.2px;text-transform:uppercase;padding:8px 8px 3px}
+.nav-btn{display:flex;align-items:center;gap:9px;padding:8px 11px;border-radius:var(--radius-sm);cursor:pointer;border:none;background:transparent;color:var(--text2);font-family:var(--font-body);font-size:13px;font-weight:500;width:100%;text-align:left;transition:all .13s;position:relative}
+.nav-btn:hover{background:var(--surface2);color:var(--text)}
+.nav-btn.active{background:var(--accent-glow);color:var(--accent)}
+.nav-btn.active::before{content:'';position:absolute;left:0;top:22%;bottom:22%;width:3px;background:var(--accent);border-radius:2px}
+.nav-btn .ni{font-size:16px;width:20px;text-align:center;flex-shrink:0}
+.nbadge{margin-left:auto;font-size:10px;font-weight:700;border-radius:20px;padding:1px 6px}
+.nbadge.g{background:var(--accent3);color:#000}
+.nbadge.b{background:var(--accent);color:#fff}
+.nbadge.r{background:var(--danger);color:#fff}
+.nbadge.ml{background:var(--ml-color);color:#fff}
+
+.tb-title{font-family:var(--font-head);font-size:16px;font-weight:700}
+.tb-sub{font-size:10px;color:var(--text3);margin-top:1px}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:10px;font-weight:600;white-space:nowrap}
+.pill.live{border-color:var(--accent3);color:var(--accent3)}
+.pill.detect{border-color:var(--accent);color:var(--accent)}
+.pill.warn{border-color:var(--warn);color:var(--warn)}
+.pill.fps{border-color:var(--accent2);color:var(--accent2);font-variant-numeric:tabular-nums;min-width:70px}
+.pill.ml-active{border-color:var(--ml-color);color:var(--ml-color)}
+.pill.collecting{border-color:var(--collect-color);color:var(--collect-color);animation:collectPulse 1s infinite}
+@keyframes collectPulse{0%,100%{opacity:1}50%{opacity:.5}}
+
+.cam-wrap{position:relative;border-radius:var(--radius);overflow:hidden;background:#000;
+  border:2px solid var(--border);display:flex;align-items:center;justify-content:center;
+  width:100%;min-height:280px}
+.cam-wrap video,.cam-wrap canvas{
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  object-fit:cover;transform:scaleX(-1)}
+.cam-wrap canvas{pointer-events:none}
+.cam-off{display:flex;flex-direction:column;align-items:center;gap:10px;
+  color:var(--text3);font-size:13px;z-index:2;text-align:center;padding:20px}
+.cam-off .oi{font-size:44px}
+.cam-hud{position:absolute;top:10px;left:10px;right:10px;
+  display:flex;justify-content:space-between;align-items:flex-start;z-index:5;pointer-events:none}
+.hud-badge{background:rgba(0,0,0,.75);border:1px solid var(--border2);border-radius:7px;
+  padding:3px 9px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:5px}
+.hud-right{display:flex;flex-direction:column;gap:4px;align-items:flex-end}
+.hud-source-rule{background:rgba(52,211,153,.2);border-color:var(--rule-color);color:var(--rule-color)}
+.hud-source-ml{background:rgba(167,139,250,.2);border-color:var(--ml-color);color:var(--ml-color)}
+
+/* Collecting overlay */
+.collecting-overlay{position:absolute;inset:0;border:3px solid var(--collect-color);border-radius:var(--radius);
+  pointer-events:none;z-index:7;animation:collectBorder 0.8s infinite}
+@keyframes collectBorder{0%,100%{opacity:1}50%{opacity:.4}}
+.collecting-badge{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  background:rgba(245,158,11,.9);border-radius:10px;padding:8px 16px;
+  font-weight:700;font-size:13px;color:#000;z-index:8;pointer-events:none;font-family:var(--font-head)}
+
+.no-hand-msg{position:absolute;bottom:60px;left:50%;transform:translateX(-50%);
+  background:rgba(245,158,11,.18);border:1px solid var(--warn);
+  border-radius:8px;padding:5px 14px;font-size:11px;font-weight:600;color:var(--warn);
+  z-index:6;pointer-events:none;white-space:nowrap}
+.rec-dot{width:7px;height:7px;border-radius:50%;background:var(--danger);animation:blink 1s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.cam-ctrls{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:5}
+.cc-btn{width:40px;height:40px;border-radius:50%;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .13s}
+.cc-primary{background:var(--accent);color:#fff}
+.cc-primary:hover{transform:scale(1.09)}
+.cc-secondary{background:rgba(0,0,0,.7);color:var(--text);border:1px solid var(--border2)}
+.cc-secondary:hover{background:var(--surface2)}
+.cc-danger{background:rgba(248,113,113,.2);color:var(--danger);border:1px solid var(--danger)}
+
+.big-out{background:linear-gradient(135deg,var(--surface2),var(--card));
+  border:1px solid var(--border);border-radius:var(--radius);padding:20px 16px;
+  text-align:center;position:relative;overflow:hidden}
+.big-out::before{content:'';position:absolute;inset:0;
+  background:radial-gradient(circle at 50% 0%,var(--accent-glow),transparent 65%);pointer-events:none}
+.big-letter{font-family:var(--font-head);font-size:86px;font-weight:800;line-height:1;
+  transition:color .2s,text-shadow .2s}
+.big-letter.conf-hi{color:var(--conf-hi);text-shadow:0 0 32px rgba(52,211,153,.5)}
+.big-letter.conf-mid{color:var(--conf-mid);text-shadow:0 0 32px rgba(79,142,247,.45)}
+.big-letter.conf-lo{color:var(--conf-lo);text-shadow:0 0 20px rgba(245,158,11,.35)}
+.big-letter.conf-vlo{color:var(--conf-vlo);text-shadow:0 0 16px rgba(248,113,113,.3)}
+.big-letter.conf-none{color:var(--text3);text-shadow:none}
+.conf-wrap{margin-top:10px}
+.conf-row{font-size:11px;color:var(--text3);display:flex;justify-content:space-between;margin-bottom:3px}
+.conf-bar{height:6px;background:var(--border);border-radius:4px;overflow:hidden}
+.conf-fill{height:100%;border-radius:4px;transition:width .15s,background .2s}
+.fps-counter{font-family:var(--font-head);font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:.5px}
+
+/* Source indicator badge */
+.source-badge{display:inline-flex;align-items:center;gap:4px;border-radius:20px;padding:2px 9px;font-size:10px;font-weight:700;margin-top:5px}
+.source-rule{background:rgba(52,211,153,.15);border:1px solid var(--rule-color);color:var(--rule-color)}
+.source-ml{background:rgba(167,139,250,.15);border:1px solid var(--ml-color);color:var(--ml-color)}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.ctitle{font-family:var(--font-head);font-size:12px;font-weight:700;color:var(--text2);
+  letter-spacing:.3px;margin-bottom:11px;display:flex;align-items:center;gap:6px}
+
+.word-chips{display:flex;flex-wrap:wrap;gap:5px;min-height:34px;align-items:center}
+.wchip{background:var(--surface2);border:1px solid var(--border);border-radius:7px;
+  padding:4px 10px;font-size:14px;font-weight:600;font-family:var(--font-head);
+  cursor:pointer;transition:all .12s}
+.wchip:hover{border-color:var(--danger);color:var(--danger)}
+.wchip.cur{border-color:var(--accent);color:var(--accent)}
+.wchip.space-chip{border-style:dashed;color:var(--text3);font-size:10px}
+.sugg-row{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+.sugg-btn{padding:3px 11px;border-radius:20px;font-size:11px;font-weight:600;
+  background:rgba(167,139,250,.1);border:1px solid var(--accent2);color:var(--accent2);
+  cursor:pointer;transition:all .12s;font-family:var(--font-body)}
+.sugg-btn:hover{background:var(--accent2);color:#fff}
+
+.hist-list{display:flex;flex-direction:column;gap:4px;max-height:190px;overflow-y:auto}
+.hist-item{display:flex;align-items:center;gap:9px;padding:6px 10px;
+  background:var(--surface2);border-radius:var(--radius-sm);font-size:12px}
+.hist-item .hl{font-family:var(--font-head);font-size:18px;font-weight:800;color:var(--accent);width:24px}
+.hist-t{margin-left:auto;color:var(--text3);font-size:10px}
+
+.conv-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;height:calc(100vh - 120px)}
+.chat-msgs{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:12px;min-height:0}
+.msg{max-width:82%;display:flex;flex-direction:column;gap:2px}
+.msg.me{align-self:flex-end;align-items:flex-end}
+.msg.them{align-self:flex-start}
+.msg-bub{padding:8px 12px;border-radius:12px;font-size:13px;line-height:1.5}
+.msg.me .msg-bub{background:var(--accent);color:#fff;border-bottom-right-radius:3px}
+.msg.them .msg-bub{background:var(--surface2);border-bottom-left-radius:3px}
+.msg-meta{font-size:10px;color:var(--text3)}
+.chat-in-row{display:flex;gap:7px;padding:10px;border-top:1px solid var(--border)}
+.chat-in{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:8px 12px;color:var(--text);font-family:var(--font-body);font-size:13px;outline:none;transition:border .12s}
+.chat-in:focus{border-color:var(--accent)}
+
+.learn-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.score-row{display:flex;gap:9px}
+.score-box{flex:1;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border);padding:12px;text-align:center}
+.score-n{font-family:var(--font-head);font-size:30px;font-weight:800;color:var(--accent)}
+.score-l{font-size:10px;color:var(--text3);margin-top:2px}
+.ab-grid{display:grid;grid-template-columns:repeat(9,1fr);gap:4px}
+.ab-btn{aspect-ratio:1;border-radius:8px;border:1px solid var(--border);background:var(--surface2);
+  color:var(--text);font-family:var(--font-head);font-size:15px;font-weight:700;
+  cursor:pointer;transition:all .12s;display:flex;align-items:center;justify-content:center;position:relative}
+.ab-btn:hover{border-color:var(--accent);color:var(--accent);transform:scale(1.06)}
+.ab-btn.done{background:rgba(52,211,153,.12);border-color:var(--accent3);color:var(--accent3)}
+.ab-btn.cur{background:var(--accent-glow);border-color:var(--accent);color:var(--accent);box-shadow:0 0 14px var(--accent-glow)}
+.ab-btn .star{position:absolute;top:1px;right:2px;font-size:7px}
+.fb-box{padding:13px 16px;border-radius:var(--radius);font-size:17px;font-weight:700;
+  font-family:var(--font-head);text-align:center;transition:all .22s}
+.fb-ok{background:rgba(52,211,153,.15);border:1px solid var(--accent3);color:var(--accent3)}
+.fb-no{background:rgba(248,113,113,.15);border:1px solid var(--danger);color:var(--danger)}
+.fb-wait{background:var(--surface2);border:1px solid var(--border);color:var(--text3)}
+
+.cap-area{background:var(--card);border:2px solid var(--border);border-radius:var(--radius);
+  padding:20px;min-height:100px;font-size:24px;font-weight:600;line-height:1.5;color:var(--text);font-family:var(--font-head)}
+.cap-ph{color:var(--text3);font-size:13px;font-weight:400;font-family:var(--font-body)}
+.tr-box{background:var(--surface);border-radius:var(--radius);padding:13px;max-height:240px;overflow-y:auto;font-size:12px;line-height:1.8;border:1px solid var(--border)}
+.tr-line{padding:3px 0;border-bottom:1px solid var(--border);color:var(--text2)}
+.tr-line span{color:var(--text3);font-size:10px;margin-right:7px}
+
+.sign-ref-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(50px,1fr));gap:5px}
+.sign-ref-item{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 4px;text-align:center;cursor:pointer;transition:all .11s;font-size:9px}
+.sign-ref-item:hover{border-color:var(--accent);transform:scale(1.06)}
+.sign-ref-item .sl{font-family:var(--font-head);font-size:17px;font-weight:800;color:var(--accent)}
+.sign-ref-item .sd{font-size:15px}
+
+.set-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.set-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border)}
+.set-lbl{font-size:13px;font-weight:500}
+.set-sub{font-size:10px;color:var(--text3);margin-top:1px}
+.toggle{width:40px;height:21px;border-radius:11px;background:var(--border);border:none;cursor:pointer;position:relative;transition:background .16s;flex-shrink:0}
+.toggle.on{background:var(--accent)}
+.toggle::after{content:'';position:absolute;top:3px;left:3px;width:15px;height:15px;border-radius:50%;background:#fff;transition:transform .16s}
+.toggle.on::after{transform:translateX(19px)}
+
+.btn{padding:8px 16px;border-radius:var(--radius-sm);border:none;cursor:pointer;font-family:var(--font-body);font-size:13px;font-weight:600;transition:all .12s;display:inline-flex;align-items:center;gap:6px}
+.btn-p{background:var(--accent);color:#fff}
+.btn-p:hover{opacity:.88;transform:translateY(-1px)}
+.btn-s{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn-s:hover{border-color:var(--accent);color:var(--accent)}
+.btn-d{background:rgba(248,113,113,.12);color:var(--danger);border:1px solid var(--danger)}
+.btn-g{background:var(--accent3);color:#000}
+.btn-ml{background:rgba(167,139,250,.15);color:var(--ml-color);border:1px solid var(--ml-color)}
+.btn-ml:hover{background:var(--ml-color);color:#fff}
+.btn-collect{background:rgba(245,158,11,.15);color:var(--collect-color);border:1px solid var(--collect-color)}
+.btn-collect.active{background:var(--collect-color);color:#000;animation:collectPulse 1s infinite}
+.btn-sm{padding:4px 11px;font-size:11px}
+.row{display:flex;align-items:center;gap:8px}
+.col{display:flex;flex-direction:column;gap:9px}
+.sp{flex:1}
+.hr{border:none;border-top:1px solid var(--border);margin:6px 0}
+
+.pulse{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent3);box-shadow:0 0 0 0 rgba(52,211,153,.4);animation:pulseA 1.5s infinite}
+@keyframes pulseA{0%{box-shadow:0 0 0 0 rgba(52,211,153,.4)}70%{box-shadow:0 0 0 9px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+
+.alert-pop{position:fixed;top:16px;right:16px;z-index:9999;border-radius:var(--radius);padding:13px 16px;font-weight:700;font-family:var(--font-head);font-size:15px;box-shadow:0 8px 28px rgba(0,0,0,.45);display:flex;align-items:center;gap:9px;animation:slideIn .22s ease;cursor:pointer}
+.alert-pop.warn{background:var(--warn);color:#000}
+.alert-pop.danger{background:var(--danger);color:#fff}
+.alert-pop.ok{background:var(--accent3);color:#000}
+@keyframes slideIn{from{transform:translateX(110%)}to{transform:translateX(0)}}
+
+.detect-grid{display:grid;grid-template-columns:1fr 300px;gap:13px}
+.out-panel{display:flex;flex-direction:column;gap:9px}
+
+.debug-panel{background:rgba(0,0,0,.6);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;font-size:10px;font-family:monospace;color:var(--text2);max-height:100px;overflow-y:auto;line-height:1.7}
+
+.mp-loading{position:absolute;inset:0;background:rgba(7,9,15,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;z-index:10;border-radius:var(--radius)}
+.mp-spinner{width:34px;height:34px;border:3px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .65s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.mp-loading-text{font-size:12px;color:var(--text2);font-family:var(--font-head);font-weight:600}
+
+.backspace-btn{background:rgba(248,113,113,.12);border:1px solid var(--danger);color:var(--danger);border-radius:6px;padding:2px 8px;font-size:10px;cursor:pointer;transition:all .12s;font-family:var(--font-body)}
+.backspace-btn:hover{background:var(--danger);color:#fff}
+.space-btn{background:rgba(79,142,247,.1);border:1px solid var(--accent);color:var(--accent);border-radius:6px;padding:2px 8px;font-size:10px;cursor:pointer;transition:all .12s;font-family:var(--font-body)}
+.space-btn:hover{background:var(--accent);color:#fff}
+
+/* ML Panel styles */
+.ml-panel{background:linear-gradient(135deg,rgba(167,139,250,.07),rgba(79,142,247,.05));border:1px solid rgba(167,139,250,.3);border-radius:var(--radius);padding:16px}
+.ml-panel .ctitle{color:var(--ml-color)}
+
+/* Data collection table */
+.data-table{width:100%;border-collapse:collapse;font-size:11px}
+.data-table th{padding:5px 8px;text-align:left;color:var(--text3);border-bottom:1px solid var(--border);font-weight:600}
+.data-table td{padding:5px 8px;border-bottom:1px solid var(--border);color:var(--text2)}
+.data-table tr:last-child td{border-bottom:none}
+.data-table tr:hover td{background:var(--surface2)}
+
+/* Sample progress bar */
+.sample-bar-wrap{display:flex;align-items:center;gap:7px}
+.sample-bar{flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden}
+.sample-bar-fill{height:100%;border-radius:4px;background:var(--collect-color);transition:width .2s}
+
+/* Model status indicator */
+.model-status{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:20px;font-size:11px;font-weight:700}
+.model-loaded{background:rgba(167,139,250,.15);border:1px solid var(--ml-color);color:var(--ml-color)}
+.model-not-loaded{background:var(--surface2);border:1px solid var(--border);color:var(--text3)}
+.model-loading{background:rgba(79,142,247,.1);border:1px solid var(--accent);color:var(--accent)}
+
+/* Collect label dropdown */
+.label-select{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:5px 10px;font-family:var(--font-body);font-size:12px;outline:none;cursor:pointer;transition:border .12s}
+.label-select:focus{border-color:var(--accent)}
+
+/* Sample count chip */
+.sample-count-chip{background:rgba(245,158,11,.15);border:1px solid var(--collect-color);color:var(--collect-color);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:700;font-family:var(--font-head)}
+
+/* Train panel */
+.train-main-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+
+/* CSV preview */
+.csv-preview{font-family:monospace;font-size:10px;color:var(--text2);background:rgba(0,0,0,.4);padding:8px;border-radius:6px;max-height:60px;overflow:hidden;line-height:1.6}
+
+@media(max-width:900px){
+  .sidebar{width:52px;min-width:52px}
+  .logo-text,.nav-btn span,.nav-sec{display:none}
+  .nav-btn{justify-content:center}
+  .detect-grid,.conv-grid,.learn-grid,.set-grid,.train-main-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SIGN ENGINE v2 — Rule-Based ASL Recogniser
+     ═══════════════════════════════════════════════════════════════ -->
+<script>
+window.SignEngine = (function () {
+  'use strict';
+  const SMOOTH_N = 4;
+  const smoothBuf = [];
+  function smoothLandmarks(lm) {
+    smoothBuf.push(lm.map(p => ({ x: p.x, y: p.y, z: p.z })));
+    if (smoothBuf.length > SMOOTH_N) smoothBuf.shift();
+    const n = smoothBuf.length;
+    return lm.map((_, i) => ({
+      x: smoothBuf.reduce((s, f) => s + f[i].x, 0) / n,
+      y: smoothBuf.reduce((s, f) => s + f[i].y, 0) / n,
+      z: smoothBuf.reduce((s, f) => s + f[i].z, 0) / n,
+    }));
+  }
+  function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z); }
+  function palmWidth(lm) { return dist(lm[5], lm[17]); }
+  function dotProduct(v1, v2) { return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z; }
+  function fingerAngle(a, b, c) {
+    const v1 = { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
+    const v2 = { x: c.x - b.x, y: c.y - b.y, z: c.z - b.z };
+    const mag1 = Math.hypot(v1.x, v1.y, v1.z);
+    const mag2 = Math.hypot(v2.x, v2.y, v2.z);
+    if (mag1 === 0 || mag2 === 0) return 0;
+    return Math.acos(Math.max(-1, Math.min(1, dotProduct(v1, v2) / (mag1 * mag2)))) * (180 / Math.PI);
+  }
+  function isFingerExtended(lm, tip, dip, pip, mcp) {
+    const angle = fingerAngle(lm[tip], lm[pip], lm[mcp]);
+    return angle > 130 || (lm[tip].y < lm[pip].y && lm[tip].y < lm[mcp].y);
+  }
+  function isFingerCurled(lm, tip, pip, mcp) { return lm[tip].y >= lm[mcp].y - 0.01; }
+  function isThumbExtended(lm) {
+    const pw = palmWidth(lm);
+    return dist(lm[4], lm[5]) / pw > 0.6 || dist(lm[4], lm[9]) / pw > 0.8;
+  }
+  function nd(lm, a, b) { return dist(lm[a], lm[b]) / palmWidth(lm); }
+  function getFingers(lm) {
+    return {
+      thumb: isThumbExtended(lm),
+      idx:   isFingerExtended(lm, 8, 7, 6, 5),
+      mid:   isFingerExtended(lm, 12, 11, 10, 9),
+      ring:  isFingerExtended(lm, 16, 15, 14, 13),
+      pin:   isFingerExtended(lm, 20, 19, 18, 17),
+      idxCurled:  isFingerCurled(lm, 8, 6, 5),
+      midCurled:  isFingerCurled(lm, 12, 10, 9),
+      ringCurled: isFingerCurled(lm, 16, 14, 13),
+      pinCurled:  isFingerCurled(lm, 20, 18, 17),
+    };
+  }
+  function recognize(rawLm, handedness) {
+    const lm = smoothLandmarks(rawLm);
+    const f  = getFingers(lm, handedness);
+    const pw = palmWidth(lm);
+    const td48 = nd(lm,4,8), td412 = nd(lm,4,12), td416 = nd(lm,4,16), td420 = nd(lm,4,20);
+    const d812 = nd(lm,8,12), d816 = nd(lm,8,16), d1216 = nd(lm,12,16), d1620 = nd(lm,16,20);
+    const thumbAboveIdxMcp = lm[4].y < lm[5].y;
+    const thumbAboveIdxPip = lm[4].y < lm[6].y;
+    if (!f.idx && !f.mid && !f.ring && !f.pin && td48 < 0.5 && td412 < 0.55 && td48 > 0.08) return { letter: '0', conf: 0.87 };
+    if (f.idx && f.idxCurled === false && !f.mid && !f.ring && !f.pin && !f.thumb) return { letter: '1', conf: 0.91 };
+    if (f.idx && f.mid && !f.ring && !f.pin && d812 > 0.18) return { letter: '2', conf: 0.87 };
+    if (f.idx && f.mid && f.ring && !f.pin) return { letter: '3', conf: 0.86 };
+    if (f.idx && f.mid && f.ring && f.pin && !f.thumb) return { letter: '4', conf: 0.88 };
+    if (f.idx && f.mid && f.ring && f.pin && f.thumb) return { letter: '5', conf: 0.90 };
+    if (f.idx && f.mid && !f.ring && !f.pin && td420 < 0.42) return { letter: '6', conf: 0.82 };
+    if (f.idx && !f.mid && f.ring && f.pin && td412 < 0.40) return { letter: '7', conf: 0.81 };
+    if (!f.idx && f.mid && f.ring && f.pin && td48 < 0.40) return { letter: '8', conf: 0.82 };
+    if (!f.idx && !f.mid && !f.ring && f.pin && td48 < 0.42) return { letter: '9', conf: 0.81 };
+    if (!f.idx && !f.mid && !f.ring && !f.pin && thumbAboveIdxPip && td48 > 0.35) return { letter: 'A', conf: 0.84 };
+    if (f.idx && f.mid && f.ring && f.pin && !f.thumb && lm[4].x < lm[5].x + pw * 0.15) return { letter: 'B', conf: 0.86 };
+    if (!f.idx && !f.mid && !f.ring && !f.pin && td48 > 0.45 && td48 < 0.80 && td412 > 0.4 && td412 < 0.80) return { letter: 'C', conf: 0.79 };
+    if (f.idx && !f.mid && !f.ring && !f.pin && td412 < 0.48 && td416 < 0.5) return { letter: 'D', conf: 0.82 };
+    if (f.idxCurled && f.midCurled && f.ringCurled && f.pinCurled && lm[8].y > lm[5].y && lm[12].y > lm[9].y) return { letter: 'E', conf: 0.80 };
+    if (!f.idx && f.mid && f.ring && f.pin && td48 < 0.36) return { letter: 'F', conf: 0.82 };
+    if (f.idx && !f.mid && !f.ring && !f.pin && Math.abs(lm[8].y - lm[5].y) < 0.09 && !f.thumb) return { letter: 'G', conf: 0.77 };
+    if (f.idx && f.mid && !f.ring && !f.pin && Math.abs(lm[8].y - lm[0].y) > 0.04 && d812 < 0.16) return { letter: 'H', conf: 0.77 };
+    if (!f.idx && !f.mid && !f.ring && f.pin && !f.thumb) return { letter: 'I', conf: 0.87 };
+    if (f.idx && f.mid && !f.ring && !f.pin && f.thumb && d812 < 0.22) return { letter: 'K', conf: 0.77 };
+    if (f.idx && !f.mid && !f.ring && !f.pin && f.thumb && td48 > 0.6) return { letter: 'L', conf: 0.87 };
+    { const tipsBelowThumb = [lm[8], lm[12], lm[16]].filter(p => p.y > lm[4].y).length;
+      if (!f.idx && !f.mid && !f.ring && !f.pin) {
+        if (tipsBelowThumb >= 3 && !thumbAboveIdxMcp) return { letter: 'M', conf: 0.74 };
+        if (tipsBelowThumb === 2 && !thumbAboveIdxMcp) return { letter: 'N', conf: 0.73 };
+      }
+    }
+    if (!f.idx && !f.mid && !f.ring && !f.pin && td48 < 0.42 && td412 < 0.45 && td48 > 0.10) return { letter: 'O', conf: 0.82 };
+    if (f.idx && f.mid && !f.ring && !f.pin && d812 < 0.12) return { letter: 'R', conf: 0.79 };
+    if (!f.idx && !f.mid && !f.ring && !f.pin && !thumbAboveIdxPip && lm[4].y < lm[8].y && lm[4].y > lm[9].y) return { letter: 'S', conf: 0.81 };
+    if (!f.idx && !f.mid && !f.ring && !f.pin && thumbAboveIdxMcp && lm[4].y < lm[8].y && lm[4].y > lm[5].y) return { letter: 'T', conf: 0.75 };
+    if (f.idx && f.mid && !f.ring && !f.pin) {
+      if (d812 < 0.14) return { letter: 'U', conf: 0.83 };
+      if (d812 > 0.17) return { letter: 'V', conf: 0.85 };
+    }
+    if (f.idx && f.mid && f.ring && !f.pin && d816 > 0.28) return { letter: 'W', conf: 0.82 };
+    if (!f.idx && !f.mid && !f.ring && !f.pin && lm[8].y < lm[5].y && lm[8].y > lm[7].y - 0.01) return { letter: 'X', conf: 0.73 };
+    if (!f.idx && !f.mid && !f.ring && f.pin && f.thumb && td420 > 0.55) return { letter: 'Y', conf: 0.86 };
+    return { letter: '?', conf: 0.0 };
+  }
+  function reset() { smoothBuf.length = 0; }
+  return { recognize, reset };
+})();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     REACT APPLICATION — with ML Hybrid System
+     ═══════════════════════════════════════════════════════════════ -->
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+/* ── Constants ─────────────────────────────────────────────────── */
+const SIGN_EMOJI = {
+  A:'✊',B:'🖐️',C:'🤏',D:'☝️',E:'🤲',F:'👌',G:'👉',H:'🤟',
+  I:'🤙',J:'👋',K:'✌️',L:'🤙',M:'✊',N:'✊',O:'⭕',P:'🫵',
+  Q:'👇',R:'🤞',S:'✊',T:'☝️',U:'✌️',V:'✌️',W:'🖖',X:'☝️',
+  Y:'🤙',Z:'☝️',
+  '0':'👌','1':'☝️','2':'✌️','3':'🤟','4':'🖖','5':'🖐️',
+  '6':'🤙','7':'👇','8':'🤌','9':'🤘',
+  'HELLO':'👋','THANK YOU':'🙏','YES':'👍','NO':'👎',
+  'HELP':'🆘','STOP':'✋','I LOVE YOU':'🤟','PLEASE':'🙏',
+};
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+const DIGITS   = '0123456789'.split('');
+const COMMON   = ['HELLO','THANK YOU','YES','NO','HELP','STOP','I LOVE YOU','PLEASE'];
+const CLASSES  = [...ALPHABET, ...DIGITS]; // 36 classes for ML model
+
+const WORD_DB = {
+  A:['AND','ARE','ALL'],B:['BE','BUT','BY'],C:['CAN','COME','CALL'],D:['DO','DAY','DID'],
+  E:['EAT','EACH'],F:['FOR','FROM','FEEL'],G:['GO','GET','GOOD'],H:['HELLO','HELP','HI','HOW'],
+  I:['I LOVE YOU','IS','IN','IT'],J:['JUST','JOY'],K:['KNOW','KIND'],L:['LIKE','LOVE','LEARN'],
+  M:['ME','MY','MORE','MAKE'],N:['NO','NAME','NEED','NOT'],O:['OF','ON','OR','OK'],
+  P:['PLEASE','PLAY','PUT'],Q:['QUIET'],R:['RIGHT','READ','RUN'],S:['STOP','SORRY','SIGN','SEE','SAY'],
+  T:['THANK YOU','TIME','THE','TO'],U:['USE','UP','US'],V:['VERY'],W:['WANT','WHAT','WITH','WHERE'],
+  X:[],Y:['YES','YOU','YOUR'],Z:[],
+};
+const SIGN_DESCRIPTIONS = {
+  A:'Closed fist, thumb beside index',B:'All four fingers up, thumb folded',C:'Hand curves like letter C',
+  D:'Index up, others curl to thumb',E:'All fingers curled to palm',F:'Index-thumb pinch, others up',
+  G:'Index points sideways',H:'Index + middle point sideways',I:'Only pinky raised',J:'Pinky up, draw J in air',
+  K:'Index + middle up, thumb between',L:'Index up + thumb out (L-shape)',M:'Fist, three fingers over thumb',
+  N:'Fist, two fingers over thumb',O:'All fingers form circle with thumb',P:'Like K pointing downward',
+  Q:'Like G pointing downward',R:'Index + middle crossed',S:'Fist, thumb over fingers',
+  T:'Thumb between index + middle',U:'Index + middle up, together',V:'Index + middle spread (victory)',
+  W:'Index + middle + ring spread',X:'Index finger hooked/bent',Y:'Thumb + pinky out',Z:'Index traces Z in air',
+  '0':'Fingers form O with thumb','1':'Only index finger up','2':'Index + middle spread',
+  '3':'Index + middle + ring up','4':'Four fingers up, no thumb','5':'All five fingers open',
+  '6':'Pinky + three up, thumb to pinky','7':'Index + ring + pinky up','8':'Middle + ring + pinky up',
+  '9':'Only pinky up, thumb near index',
+};
+
+function confClass(pct) {
+  if (pct >= 82) return 'conf-hi';
+  if (pct >= 65) return 'conf-mid';
+  if (pct >= 45) return 'conf-lo';
+  if (pct > 0)   return 'conf-vlo';
+  return 'conf-none';
+}
+function confBarColor(pct) {
+  if (pct >= 82) return 'var(--conf-hi)';
+  if (pct >= 65) return 'var(--conf-mid)';
+  if (pct >= 45) return 'var(--conf-lo)';
+  return 'var(--conf-vlo)';
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   ML DATA COLLECTION STORE (module-level, persists across renders)
+   ══════════════════════════════════════════════════════════════════ */
+const mlStore = {
+  trainingData: [],   // [{features:[63 floats], label:'A'}, ...]
+  isCollecting: false,
+  currentLabel: 'A',
+  frameCount: 0,      // throttle: collect every N frames
+};
+
+function collectSample(lm, label) {
+  const features = lm.flatMap(p => [p.x, p.y, p.z]);
+  mlStore.trainingData.push({ features, label });
+}
+
+function downloadCSV() {
+  if (mlStore.trainingData.length === 0) return false;
+  const header = [...Array(63)].map((_, i) => `f${i}`).join(',') + ',label';
+  const rows = mlStore.trainingData.map(r => [...r.features, r.label].join(','));
+  const csv = [header, ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'asl_training_data.csv';
+  a.click();
+  return true;
+}
+
+function getSampleCountsByLabel() {
+  const counts = {};
+  mlStore.trainingData.forEach(d => {
+    counts[d.label] = (counts[d.label] || 0) + 1;
+  });
+  return counts;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   APP COMPONENT
+   ═══════════════════════════════════════════════════════════════ */
+function App() {
+  const [page, setPage]           = useState('detect');
+  const [hc, setHc]               = useState(false);
+  const [cameraOn, setCameraOn]   = useState(false);
+  const [mpReady, setMpReady]     = useState(false);
+  const [mpLoading, setMpLoading] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+
+  const [stableResult, setStable] = useState({ letter: '', conf: 0, hand: '', source: 'rule' });
+  const [handVisible, setHandVis] = useState(false);
+  const [fps, setFps]             = useState(0);
+  const [debugMode, setDebugMode] = useState(false);
+  const [debugLog, setDebugLog]   = useState([]);
+
+  const [wordBuffer, setWordBuf]  = useState([]);
+  const [history, setHistory]     = useState([]);
+  const [suggestions, setSugg]    = useState([]);
+  const [alert, setAlert]         = useState(null);
+
+  const [messages, setMessages]   = useState([
+    { id: 1, from: 'them', text: "Hi! I'm using SignSense ML.", time: '12:01' },
+    { id: 2, from: 'me',   text: 'Hello! Great to connect 👋', time: '12:02' },
+  ]);
+  const [chatIn, setChatIn]       = useState('');
+  const [capText, setCapText]     = useState('');
+  const [listening, setListening] = useState(false);
+  const [transcript, setTr]       = useState([]);
+
+  const [learnTarget, setTarget]  = useState('A');
+  const [score, setScore]         = useState(0);
+  const [streak, setStreak]       = useState(0);
+  const [doneLetters, setDone]    = useState([]);
+  const [feedback, setFB]         = useState('wait');
+
+  const [trainStep, setTStep]     = useState(0);
+  const [trainName, setTName]     = useState('');
+  const [trainSamples, setTSamp]  = useState(0);
+  const [savedGestures, setSaved] = useState(
+    () => JSON.parse(localStorage.getItem('ss_gestures') || '[]')
+  );
+
+  const [ttsOn, setTts]           = useState(true);
+  const [sens, setSens]           = useState(65);
+  const [overlay, setOverlay]     = useState(true);
+  const [showFps, setShowFps]     = useState(true);
+
+  // ── ML State ────────────────────────────────────────────────────
+  const [mlEnabled, setMlEnabled]         = useState(false);
+  const [mlModelStatus, setMlModelStatus] = useState('not_loaded'); // not_loaded | loading | loaded | error
+  const [mlModelPath, setMlModelPath]     = useState('');
+  const [isCollecting, setIsCollecting]   = useState(false);
+  const [collectLabel, setCollectLabel]   = useState('A');
+  const [sampleCounts, setSampleCounts]   = useState({});
+  const [totalSamples, setTotalSamples]   = useState(0);
+
+  // Refs
+  const videoRef   = useRef(null);
+  const canvasRef  = useRef(null);
+  const streamRef  = useRef(null);
+  const handsRef   = useRef(null);
+  const camApiRef  = useRef(null);
+  const speechRef  = useRef(null);
+  const chatBotRef = useRef(null);
+  const tfModelRef = useRef(null);   // TF.js model ref
+
+  const resultBuf  = useRef([]);
+  const lastAdded  = useRef(0);
+  const stableRef  = useRef({ letter: '', conf: 0 });
+  const frameCountRef = useRef(0);  // for ML throttle
+
+  const fpsFrames  = useRef(0);
+  const fpsTimer   = useRef(0);
+
+  // Sync collecting state to module-level store
+  useEffect(() => { mlStore.isCollecting = isCollecting; }, [isCollecting]);
+  useEffect(() => { mlStore.currentLabel = collectLabel; }, [collectLabel]);
+
+  // ── Load TF.js Model ─────────────────────────────────────────────
+  const loadTfModel = useCallback(async (path) => {
+    if (!path) return;
+    setMlModelStatus('loading');
+    try {
+      const model = await tf.loadLayersModel(path);
+      tfModelRef.current = model;
+      setMlModelStatus('loaded');
+      showAlert('🧠 AI model loaded successfully!', 'ok');
+    } catch (err) {
+      console.error('[SignSense ML] Model load error:', err);
+      setMlModelStatus('error');
+      showAlert('❌ Model load failed — check path/URL', 'danger');
+    }
+  }, []);
+
+  // ── Hybrid Recognition ───────────────────────────────────────────
+  /*  Priority:
+      1. Rule engine: if conf > 0.82 → use directly
+      2. ML model (if enabled + loaded): fallback for low-conf rule results
+      3. Return best result with source tag
+      ML throttled to every 3rd frame for performance.
+  */
+  const hybridRecognize = useCallback((lm) => {
+    const ruleResult = window.SignEngine.recognize(lm);
+    frameCountRef.current++;
+
+    // High-confidence rule result — skip ML
+    if (ruleResult.conf > 0.82) {
+      return { ...ruleResult, source: 'rule' };
+    }
+
+    // ML fallback (only every 3rd frame + if enabled + if loaded)
+    const model = tfModelRef.current;
+    if (!mlEnabled || !model || frameCountRef.current % 3 !== 0) {
+      return { ...ruleResult, source: 'rule' };
+    }
+
+    try {
+      const features = tf.tensor2d([lm.flatMap(p => [p.x, p.y, p.z])]);
+      const prediction = model.predict(features);
+      const classIndex = prediction.argMax(-1).dataSync()[0];
+      const confidence = prediction.max().dataSync()[0];
+
+      // Dispose tensors to prevent memory leak
+      features.dispose();
+      prediction.dispose();
+
+      // Only use ML if it's meaningfully confident
+      if (confidence > 0.55) {
+        return {
+          letter: CLASSES[classIndex] || '?',
+          conf: confidence,
+          hand: ruleResult.hand,
+          source: 'ml',
+        };
+      }
+    } catch (e) {
+      console.warn('[SignSense ML] Prediction error:', e.message);
+    }
+
+    return { ...ruleResult, source: 'rule' };
+  }, [mlEnabled]);
+
+  // ── FPS ──────────────────────────────────────────────────────────
+  const tickFps = useCallback(() => {
+    fpsFrames.current++;
+    const now = Date.now();
+    if (now - fpsTimer.current >= 1000) {
+      setFps(fpsFrames.current);
+      fpsFrames.current = 0;
+      fpsTimer.current = now;
+    }
+  }, []);
+
+  // ── Camera ───────────────────────────────────────────────────────
+  const startCamera = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+        audio: false,
+      });
+      streamRef.current = stream;
+      const video = videoRef.current;
+      if (!video) { stream.getTracks().forEach(t => t.stop()); return; }
+      video.srcObject = stream;
+      setCameraOn(true);
+      setMpLoading(true);
+      await new Promise((resolve, reject) => {
+        video.onloadedmetadata = resolve;
+        video.onerror = reject;
+        setTimeout(reject, 8000);
+      });
+      await video.play();
+      window.SignEngine.reset();
+      initMediaPipe(video);
+    } catch (err) {
+      const msg = err.name === 'NotAllowedError'
+        ? '🔒 Camera permission denied'
+        : err.name === 'NotFoundError'
+          ? '📷 No camera found'
+          : `Camera failed: ${err.message}`;
+      showAlert(msg, 'danger');
+      setCameraOn(false);
+      setMpLoading(false);
+    }
+  }, []);
+
+  // ── MediaPipe ────────────────────────────────────────────────────
+  const overlayRef = useRef(overlay);
+  const sensRef    = useRef(sens);
+  const ttsRef     = useRef(ttsOn);
+  const debugRef   = useRef(debugMode);
+  useEffect(() => { overlayRef.current = overlay; }, [overlay]);
+  useEffect(() => { sensRef.current = sens; }, [sens]);
+  useEffect(() => { ttsRef.current = ttsOn; }, [ttsOn]);
+  useEffect(() => { debugRef.current = debugMode; }, [debugMode]);
+
+  const initMediaPipe = useCallback((video) => {
+    if (!window.Hands) {
+      showAlert('MediaPipe Hands not loaded', 'danger');
+      setMpLoading(false);
+      return;
+    }
+    handsRef.current?.close?.();
+    camApiRef.current?.stop?.();
+    const hands = new window.Hands({
+      locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`,
+    });
+    hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.45, minTrackingConfidence: 0.40 });
+    hands.onResults(onResults);
+    handsRef.current = hands;
+    const cam = new window.Camera(video, {
+      onFrame: async () => {
+        if (video.readyState === 4 && !video.paused) {
+          try { await hands.send({ image: video }); } catch (e) {}
+        }
+      },
+      width: 640,
+      height: 480,
+    });
+    cam.start();
+    camApiRef.current = cam;
+    fpsTimer.current = Date.now();
+    setMpReady(true);
+    setMpLoading(false);
+    setDetecting(true);
+  }, []);
+
+  // ── onResults: hot path ──────────────────────────────────────────
+  const onResults = useCallback((results) => {
+    tickFps();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    canvas.width  = results.image?.width  || 640;
+    canvas.height = results.image?.height || 480;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (!results.multiHandLandmarks?.length) {
+      setHandVis(false);
+      return;
+    }
+
+    setHandVis(true);
+    const lm        = results.multiHandLandmarks[0];
+    const handLabel = results.multiHandedness?.[0]?.label || 'Right';
+
+    // Draw overlay
+    if (overlayRef.current) {
+      if (window.drawConnectors && window.HAND_CONNECTIONS) {
+        window.drawConnectors(ctx, lm, window.HAND_CONNECTIONS, { color: 'rgba(79,142,247,0.65)', lineWidth: 2 });
+      }
+      if (window.drawLandmarks) {
+        window.drawLandmarks(ctx, lm, { color: '#a78bfa', fillColor: 'rgba(79,142,247,0.3)', lineWidth: 1, radius: 4 });
+      }
+    }
+
+    // ── Data Collection ──────────────────────────────────────────
+    if (mlStore.isCollecting && mlStore.frameCount % 2 === 0) {
+      // Collect every other frame to avoid redundant data
+      collectSample(lm, mlStore.currentLabel);
+      setTotalSamples(mlStore.trainingData.length);
+      setSampleCounts({ ...getSampleCountsByLabel() });
+    }
+    mlStore.frameCount++;
+
+    // ── Hybrid Recognition ───────────────────────────────────────
+    const raw = hybridRecognize(lm);
+
+    if (debugRef.current && fpsFrames.current % 5 === 0) {
+      setDebugLog(d => [`${raw.letter} (${Math.round(raw.conf * 100)}%) [${raw.source?.toUpperCase()}] ${handLabel}`, ...d.slice(0, 9)]);
+    }
+
+    // Stability buffer
+    const minConfGate = (sensRef.current / 100) * 0.55;
+    if (raw.conf >= minConfGate && raw.letter !== '?') {
+      resultBuf.current.push({ letter: raw.letter, source: raw.source });
+    } else {
+      resultBuf.current.push(null);
+    }
+    if (resultBuf.current.length > 7) resultBuf.current.shift();
+
+    const counts = {};
+    resultBuf.current.forEach(r => { if (r) counts[r.letter] = (counts[r.letter] || 0) + 1; });
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+
+    if (top && top[1] >= 3 && top[0] !== '?') {
+      const sLetter = top[0];
+      // Find the most recent source for this letter
+      const lastEntry = [...resultBuf.current].reverse().find(r => r?.letter === sLetter);
+      const sSource   = lastEntry?.source || raw.source || 'rule';
+
+      stableRef.current = { letter: sLetter, conf: raw.conf };
+      setStable({ letter: sLetter, conf: raw.conf, hand: handLabel, source: sSource });
+
+      const now = Date.now();
+      if (now - lastAdded.current > 1150) {
+        lastAdded.current = now;
+        setWordBuf(b => {
+          const nb = [...b, sLetter];
+          setSugg(WORD_DB[nb[0]] || []);
+          return nb.slice(-24);
+        });
+        setHistory(h => [{
+          letter: sLetter, conf: raw.conf,
+          hand: handLabel, time: new Date().toLocaleTimeString(),
+          source: sSource,
+        }, ...h.slice(0, 99)]);
+        if (ttsRef.current && window.speechSynthesis) {
+          const u = new SpeechSynthesisUtterance(sLetter);
+          u.rate = 1.15; u.volume = 0.9;
+          window.speechSynthesis.speak(u);
+        }
+      }
+    }
+  }, [tickFps, hybridRecognize]);
+
+  // ── Stop Camera ──────────────────────────────────────────────────
+  const stopCamera = useCallback(() => {
+    camApiRef.current?.stop?.();
+    handsRef.current?.close?.();
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    window.SignEngine.reset();
+    setCameraOn(false); setDetecting(false); setMpReady(false); setHandVis(false);
+    setStable({ letter: '', conf: 0, hand: '', source: 'rule' });
+    resultBuf.current = [];
+    stableRef.current = { letter: '', conf: 0 };
+    frameCountRef.current = 0;
+  }, []);
+
+  const showAlert = useCallback((msg, type = 'warn') => {
+    setAlert({ msg, type });
+    setTimeout(() => setAlert(null), 4500);
+  }, []);
+
+  const speak = useCallback((txt) => {
+    if (!txt || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(txt);
+    u.rate = 0.95;
+    window.speechSynthesis.speak(u);
+  }, []);
+
+  // ── Caption / Speech ─────────────────────────────────────────────
+  const startListen = useCallback(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { showAlert('Speech recognition not supported', 'danger'); return; }
+    const r = new SR();
+    r.continuous = true; r.interimResults = true; r.lang = 'en-US';
+    r.onresult = e => {
+      let fin = '', int = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) fin += e.results[i][0].transcript + ' ';
+        else int += e.results[i][0].transcript;
+      }
+      setCapText(fin + int);
+      if (fin) setTr(t => [...t, { text: fin.trim(), time: new Date().toLocaleTimeString() }]);
+    };
+    r.onend = () => setListening(false);
+    r.onerror = () => setListening(false);
+    r.start();
+    speechRef.current = r;
+    setListening(true);
+  }, [showAlert]);
+  const stopListen = useCallback(() => { speechRef.current?.stop(); setListening(false); }, []);
+  const saveTr = useCallback(() => {
+    const t = transcript.map(x => `[${x.time}] ${x.text}`).join('\n');
+    const b = new Blob([t], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b); a.download = 'signsense_transcript.txt'; a.click();
+  }, [transcript]);
+
+  // ── Chat ─────────────────────────────────────────────────────────
+  const sendChat = useCallback(() => {
+    if (!chatIn.trim()) return;
+    setMessages(m => [...m, { id: Date.now(), from: 'me', text: chatIn, time: new Date().toLocaleTimeString() }]);
+    setChatIn('');
+    clearTimeout(chatBotRef.current);
+    chatBotRef.current = setTimeout(() => {
+      setMessages(m => [...m, { id: Date.now() + 1, from: 'them', text: 'Got it! 👍', time: new Date().toLocaleTimeString() }]);
+    }, 900);
+  }, [chatIn]);
+
+  // ── Learning ─────────────────────────────────────────────────────
+  const checkLearn = useCallback(() => {
+    if (!detecting) { showAlert('Start camera first', 'warn'); return; }
+    const cur = stableRef.current;
+    if (cur.letter === learnTarget && cur.conf > 0.68) {
+      setFB('ok'); setScore(s => s + 10); setStreak(s => s + 1);
+      setDone(d => [...new Set([...d, learnTarget])]);
+      speak('Correct!');
+      setTimeout(() => {
+        const i = ALPHABET.indexOf(learnTarget);
+        if (i < ALPHABET.length - 1) setTarget(ALPHABET[i + 1]);
+        setFB('wait');
+      }, 1400);
+    } else {
+      setFB('no'); setStreak(0); speak('Try again');
+      setTimeout(() => setFB('wait'), 1400);
+    }
+  }, [detecting, learnTarget, speak, showAlert]);
+
+  // ── Training (custom gesture) ─────────────────────────────────────
+  const captureSample = useCallback(() => {
+    setTSamp(n => {
+      const ns = n + 1;
+      if (ns >= 8) {
+        setTStep(2);
+        const ng = [...savedGestures, { name: trainName, samples: 8, date: new Date().toLocaleDateString() }];
+        setSaved(ng);
+        localStorage.setItem('ss_gestures', JSON.stringify(ng));
+        showAlert('✅ Training complete!', 'ok');
+      }
+      return ns;
+    });
+  }, [trainName, savedGestures, showAlert]);
+
+  // ── Data Collection Controls ──────────────────────────────────────
+  const startCollecting = useCallback(() => {
+    if (!cameraOn) { showAlert('Start camera first', 'warn'); return; }
+    mlStore.isCollecting = true;
+    setIsCollecting(true);
+    showAlert(`📊 Collecting data for "${collectLabel}" — show the sign!`, 'warn');
+  }, [cameraOn, collectLabel, showAlert]);
+
+  const stopCollecting = useCallback(() => {
+    mlStore.isCollecting = false;
+    setIsCollecting(false);
+    setSampleCounts({ ...getSampleCountsByLabel() });
+    setTotalSamples(mlStore.trainingData.length);
+  }, []);
+
+  const clearTrainingData = useCallback(() => {
+    mlStore.trainingData = [];
+    setTotalSamples(0);
+    setSampleCounts({});
+    showAlert('🗑 Training data cleared', 'warn');
+  }, [showAlert]);
+
+  const handleDownloadCSV = useCallback(() => {
+    const ok = downloadCSV();
+    if (ok) showAlert(`✅ Downloaded ${mlStore.trainingData.length} samples as CSV`, 'ok');
+    else showAlert('No data to download yet — collect samples first', 'warn');
+  }, [showAlert]);
+
+  // ── Cleanup ───────────────────────────────────────────────────────
+  useEffect(() => () => {
+    stopCamera(); stopListen(); clearTimeout(chatBotRef.current);
+    // Dispose TF model on unmount
+    if (tfModelRef.current) { try { tfModelRef.current.dispose(); } catch(e){} }
+  }, []);
+
+  // ── Derived values ────────────────────────────────────────────────
+  const confPct      = Math.round((stableResult.conf || 0) * 100);
+  const cCls         = confClass(confPct);
+  const barColor     = confBarColor(confPct);
+  const showNoHand   = cameraOn && !handVisible && detecting;
+  const mlLoaded     = mlModelStatus === 'loaded';
+
+  // ── Nav ───────────────────────────────────────────────────────────
+  const navItems = [
+    { id: 'detect',       icon: '👁️',  label: 'Detect',     badge: detecting ? 'LIVE' : null, bc: 'g' },
+    { id: 'ml',           icon: '🧠',  label: 'AI / ML',    badge: mlLoaded ? 'ON' : null, bc: 'ml' },
+    { id: 'datacollect',  icon: '📊',  label: 'Data Collect', badge: totalSamples > 0 ? totalSamples : null, bc: 'b' },
+    { id: 'reference',    icon: '📖',  label: 'Sign Guide' },
+    { id: 'conversation', icon: '💬',  label: 'Chat',       badge: messages.length, bc: 'b' },
+    { id: 'captions',     icon: '🧾',  label: 'Captions' },
+    { id: 'learn',        icon: '🎓',  label: 'Learning' },
+    { id: 'train',        icon: '🎯',  label: 'Training' },
+    { id: 'history',      icon: '🕐',  label: 'History',    badge: history.length || null },
+    { id: 'settings',     icon: '⚙️',  label: 'Settings' },
+  ];
+
+  // ── Camera Pane ───────────────────────────────────────────────────
+  const CamPane = ({ mini }) => (
+    <div className="cam-wrap" style={{ aspectRatio: '4/3', minHeight: mini ? 200 : 260 }}>
+      <video ref={videoRef} autoPlay playsInline muted
+        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+          objectFit: 'cover', display: cameraOn ? 'block' : 'none', transform: 'scaleX(-1)' }} />
+      <canvas ref={canvasRef}
+        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+          display: cameraOn ? 'block' : 'none', transform: 'scaleX(-1)', pointerEvents: 'none' }} />
+
+      {!cameraOn && (
+        <div className="cam-off">
+          <div className="oi">📷</div>
+          <div style={{ fontWeight: 600, color: 'var(--text2)' }}>Camera off</div>
+          <button className="btn btn-p btn-sm" onClick={startCamera}>📷 Start Camera</button>
+        </div>
+      )}
+      {mpLoading && (
+        <div className="mp-loading">
+          <div className="mp-spinner" />
+          <div className="mp-loading-text">Loading MediaPipe Hands…</div>
+          <div style={{ fontSize: 10, color: 'var(--text3)' }}>First load may take 5–10s</div>
+        </div>
+      )}
+
+      {/* Data collection overlay */}
+      {isCollecting && cameraOn && (
+        <>
+          <div className="collecting-overlay" />
+          <div className="collecting-badge">📊 COLLECTING: {collectLabel}</div>
+        </>
+      )}
+
+      {cameraOn && (
+        <div className="cam-hud">
+          <div className="hud-badge"><div className="rec-dot" />LIVE</div>
+          <div className="hud-right">
+            {stableResult.hand && (
+              <div className={`hud-badge ${stableResult.source === 'ml' ? 'hud-source-ml' : 'hud-source-rule'}`}>
+                {stableResult.source === 'ml' ? '🧠 AI' : '📐 Rule'} · {confPct}%
+              </div>
+            )}
+            {showFps && (
+              <div className="hud-badge">
+                <span className="fps-counter" style={{ color: fps >= 24 ? 'var(--accent3)' : 'var(--warn)' }}>
+                  {fps} FPS
+                </span>
+              </div>
+            )}
+            {isCollecting && (
+              <div className="hud-badge" style={{ background: 'rgba(245,158,11,.3)', borderColor: 'var(--collect-color)', color: 'var(--collect-color)' }}>
+                {totalSamples} samples
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showNoHand && (
+        <div className="no-hand-msg">👋 No hand detected — show your hand to the camera</div>
+      )}
+
+      <div className="cam-ctrls">
+        <button className="cc-btn cc-secondary" onClick={cameraOn ? stopCamera : startCamera}>
+          {cameraOn ? '🚫' : '📷'}
+        </button>
+        {cameraOn && (
+          <button className={`cc-btn ${mpReady ? 'cc-danger' : 'cc-primary'}`} disabled>{mpReady ? '🧠' : '⏳'}</button>
+        )}
+        <button className="cc-btn cc-secondary" onClick={() => speak(wordBuffer.join('') || stableResult.letter)}>🔊</button>
+        <button className="cc-btn cc-secondary" onClick={() => setWordBuf([])}>🗑️</button>
+      </div>
+    </div>
+  );
+
+  // ── Source Badge ──────────────────────────────────────────────────
+  const SourceBadge = ({ source }) => (
+    source
+      ? <span className={`source-badge ${source === 'ml' ? 'source-ml' : 'source-rule'}`}>
+          {source === 'ml' ? '🧠 AI Model' : '📐 Rule Engine'}
+        </span>
+      : null
+  );
+
+  // ═══════════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════════
+  return (
+    <div className={`app${hc ? ' hc' : ''}`}>
+
+      {/* SIDEBAR */}
+      <nav className="sidebar">
+        <div className="logo">
+          <div className="logo-icon">🤟</div>
+          <div className="logo-text">Sign<span>Sense</span></div>
+        </div>
+        <div className="nav-sec">Navigation</div>
+        {navItems.map(n => (
+          <button key={n.id} className={`nav-btn${page === n.id ? ' active' : ''}`} onClick={() => setPage(n.id)}>
+            <span className="ni">{n.icon}</span>
+            <span>{n.label}</span>
+            {n.badge != null && <span className={`nbadge ${n.bc || ''}`}>{n.badge}</span>}
+          </button>
+        ))}
+        <div style={{ marginTop: 'auto' }}>
+          <div className="hr" />
+          <div className="nav-sec">Accessibility</div>
+          <button className="nav-btn" onClick={() => setHc(h => !h)}>
+            <span className="ni">🔆</span><span>High Contrast</span>
+            {hc && <span className="nbadge g">ON</span>}
+          </button>
+          <button className="nav-btn" onClick={() => setTts(t => !t)}>
+            <span className="ni">🔊</span><span>Voice Output</span>
+            {ttsOn && <span className="nbadge b">ON</span>}
+          </button>
+        </div>
+      </nav>
+
+      {/* MAIN */}
+      <div className="main">
+        <div className="topbar">
+          <div>
+            <div className="tb-title">
+              {navItems.find(n => n.id === page)?.icon}{' '}
+              {navItems.find(n => n.id === page)?.label}
+            </div>
+            <div className="tb-sub">SignSense ML · MediaPipe + TensorFlow.js · Hybrid ASL Recognition</div>
+          </div>
+          <div className="tb-right">
+            {cameraOn   && <div className="pill live"><span className="pulse" />Camera On</div>}
+            {detecting  && <div className="pill detect">⚡ Detecting</div>}
+            {mlLoaded   && mlEnabled && <div className="pill ml-active">🧠 AI Active</div>}
+            {isCollecting && <div className="pill collecting">📊 Collecting: {collectLabel}</div>}
+            {showFps    && detecting && <div className="pill fps">
+              <span style={{ color: fps >= 24 ? 'var(--accent3)' : 'var(--warn)' }}>{fps} fps</span>
+            </div>}
+            <div className="pill">📶 Offline</div>
+          </div>
+        </div>
+
+        <div className="content">
+
+          {/* ═══ DETECT PAGE ═══ */}
+          {page === 'detect' && (
+            <div className="detect-grid">
+              <div className="col">
+                <CamPane />
+                {/* Word Builder */}
+                <div className="card">
+                  <div className="ctitle">
+                    ✍️ Word Builder
+                    <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text3)', fontWeight: 400 }}>1.2s hold</span>
+                    {wordBuffer.length > 0 && (
+                      <>
+                        <button className="space-btn" onClick={() => setWordBuf(b => [...b, ' '])}>⎵ Space</button>
+                        <button className="backspace-btn" onClick={() => setWordBuf(b => b.slice(0, -1))}>⌫</button>
+                      </>
+                    )}
+                  </div>
+                  <div className="word-chips">
+                    {wordBuffer.length === 0
+                      ? <span style={{ color: 'var(--text3)', fontSize: 12 }}>Hold a sign steady — letters appear here…</span>
+                      : wordBuffer.map((l, i) => (
+                          <div key={i}
+                            className={`wchip${i === wordBuffer.length - 1 ? ' cur' : ''}${l === ' ' ? ' space-chip' : ''}`}
+                            onClick={() => setWordBuf(b => b.filter((_, j) => j !== i))}
+                            title="Click to remove">
+                            {l === ' ' ? '·' : l}
+                          </div>
+                        ))
+                    }
+                  </div>
+                  {wordBuffer.length > 0 && (
+                    <>
+                      <div style={{ fontFamily: 'var(--font-head)', fontSize: 20, fontWeight: 700, margin: '8px 0', color: 'var(--text)' }}>
+                        {wordBuffer.join('').trim()}
+                      </div>
+                      {suggestions.length > 0 && (
+                        <div className="sugg-row">
+                          {suggestions.map(s => (
+                            <button key={s} className="sugg-btn" onClick={() => { setWordBuf(s.split('')); speak(s); }}>
+                              {SIGN_EMOJI[s] || ''} {s}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <div className="row" style={{ marginTop: 8 }}>
+                        <button className="btn btn-p btn-sm" onClick={() => speak(wordBuffer.join('').trim())}>🔊 Speak</button>
+                        <button className="btn btn-s btn-sm" onClick={() => {
+                          setMessages(m => [...m, { id: Date.now(), from: 'me', text: wordBuffer.join('').trim(), time: new Date().toLocaleTimeString() }]);
+                          setWordBuf([]);
+                        }}>📤 Chat</button>
+                        <button className="btn btn-s btn-sm" onClick={() => setWordBuf([])}>🗑 Clear</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+                {debugMode && (
+                  <div className="card">
+                    <div className="ctitle">🐛 Debug Log
+                      <button className="btn btn-s btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setDebugLog([])}>Clear</button>
+                    </div>
+                    <div className="debug-panel">
+                      {debugLog.map((l, i) => <div key={i}>{l}</div>)}
+                      {debugLog.length === 0 && <div style={{ color: 'var(--text3)' }}>Waiting for frames…</div>}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="out-panel">
+                {/* Big output */}
+                <div className="big-out">
+                  <div className={`big-letter ${cCls}`}>{stableResult.letter || '—'}</div>
+                  <div style={{ fontSize: 32, marginTop: 4 }}>{SIGN_EMOJI[stableResult.letter] || ''}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4 }}>
+                    {stableResult.letter ? SIGN_DESCRIPTIONS[stableResult.letter] || '' : 'Show a sign to the camera'}
+                  </div>
+                  {stableResult.letter && <SourceBadge source={stableResult.source} />}
+                  <div className="conf-wrap">
+                    <div className="conf-row">
+                      <span>Confidence</span>
+                      <span style={{ color: barColor, fontWeight: 700 }}>{confPct}%</span>
+                    </div>
+                    <div className="conf-bar">
+                      <div className="conf-fill" style={{ width: `${confPct}%`, background: barColor }} />
+                    </div>
+                    {confPct > 0 && confPct < 45 && (
+                      <div style={{ color: 'var(--conf-vlo)', fontSize: 10, marginTop: 4 }}>⚠ Very low — reposition hand</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Detection status */}
+                <div className="card">
+                  <div className="ctitle">🤝 Detection Status</div>
+                  <div className="row" style={{ flexWrap: 'wrap', gap: 5 }}>
+                    <div className="pill">Hand: {stableResult.hand || '—'}</div>
+                    <div className="pill" style={{ borderColor: mpReady ? 'var(--accent3)' : 'var(--border)', color: mpReady ? 'var(--accent3)' : 'var(--text3)' }}>
+                      {mpReady ? '✓ Active' : 'Off'}
+                    </div>
+                    <div className="pill" style={{ borderColor: mlLoaded && mlEnabled ? 'var(--ml-color)' : 'var(--border)', color: mlLoaded && mlEnabled ? 'var(--ml-color)' : 'var(--text3)' }}>
+                      {mlLoaded && mlEnabled ? '🧠 AI On' : '📐 Rule'}
+                    </div>
+                  </div>
+                  {!cameraOn && <button className="btn btn-p btn-sm" style={{ marginTop: 8 }} onClick={startCamera}>📷 Start Camera</button>}
+                </div>
+
+                {/* Recent signs */}
+                <div className="card">
+                  <div className="ctitle">⏱ Recent Signs</div>
+                  <div className="hist-list">
+                    {history.slice(0, 7).map((h, i) => (
+                      <div key={i} className="hist-item">
+                        <div className="hl">{h.letter}</div>
+                        <div style={{ fontSize: 16 }}>{SIGN_EMOJI[h.letter] || ''}</div>
+                        <div className="conf-bar" style={{ flex: 1, height: 4 }}>
+                          <div className="conf-fill" style={{ width: `${Math.round(h.conf * 100)}%`, background: confBarColor(Math.round(h.conf * 100)) }} />
+                        </div>
+                        <span style={{ fontSize: 9, color: h.source === 'ml' ? 'var(--ml-color)' : 'var(--rule-color)', fontWeight: 700 }}>
+                          {h.source === 'ml' ? '🧠' : '📐'}
+                        </span>
+                        <div className="hist-t">{h.time}</div>
+                      </div>
+                    ))}
+                    {history.length === 0 && <div style={{ color: 'var(--text3)', fontSize: 12 }}>No detections yet</div>}
+                  </div>
+                </div>
+
+                {/* Quick phrases */}
+                <div className="card">
+                  <div className="ctitle">💬 Quick Phrases</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {COMMON.map(w => (
+                      <button key={w} className="btn btn-s btn-sm" onClick={() => speak(w)} style={{ fontSize: 10 }}>
+                        {SIGN_EMOJI[w]} {w}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ═══ ML / AI PAGE ═══ */}
+          {page === 'ml' && (
+            <div className="col" style={{ maxWidth: 720 }}>
+              <div className="ml-panel">
+                <div className="ctitle">🧠 AI Model Configuration</div>
+                <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 13, lineHeight: 1.7 }}>
+                  Load a TensorFlow.js model trained on ASL landmark data. The model input should be <strong style={{ color: 'var(--ml-color)' }}>63 features</strong> (21 landmarks × x/y/z) and output <strong style={{ color: 'var(--ml-color)' }}>36 classes</strong> (A–Z, 0–9).
+                </div>
+
+                {/* Model status */}
+                <div className="row" style={{ marginBottom: 12 }}>
+                  <span className={`model-status ${mlModelStatus === 'loaded' ? 'model-loaded' : mlModelStatus === 'loading' ? 'model-loading' : 'model-not-loaded'}`}>
+                    {mlModelStatus === 'loaded' ? '✓ Model Loaded' : mlModelStatus === 'loading' ? '⏳ Loading…' : mlModelStatus === 'error' ? '❌ Load Error' : '○ No Model'}
+                  </span>
+                  {mlLoaded && (
+                    <button className={`toggle${mlEnabled ? ' on' : ''}`} onClick={() => setMlEnabled(e => !e)} />
+                  )}
+                  {mlLoaded && <span style={{ fontSize: 12, color: mlEnabled ? 'var(--ml-color)' : 'var(--text3)' }}>AI {mlEnabled ? 'Enabled' : 'Disabled'}</span>}
+                </div>
+
+                {/* Model path input */}
+                <div className="col" style={{ gap: 7 }}>
+                  <label style={{ fontSize: 11, color: 'var(--text2)' }}>Model URL or path (model.json):</label>
+                  <div className="row">
+                    <input className="chat-in" style={{ flex: 1 }}
+                      placeholder="https://your-server.com/model/model.json or model/model.json"
+                      value={mlModelPath}
+                      onChange={e => setMlModelPath(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && loadTfModel(mlModelPath)} />
+                    <button className="btn btn-ml btn-sm" onClick={() => loadTfModel(mlModelPath)}
+                      disabled={mlModelStatus === 'loading' || !mlModelPath}>
+                      {mlModelStatus === 'loading' ? '⏳' : '⬆ Load'}
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text3)', lineHeight: 1.7 }}>
+                    Train a model on your collected CSV data using Python/Keras, export as TF.js format with <code>tensorflowjs_converter</code>, then host and load it here.
+                  </div>
+                </div>
+              </div>
+
+              {/* Hybrid logic explanation */}
+              <div className="card">
+                <div className="ctitle">⚡ Hybrid Recognition Logic</div>
+                <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.9 }}>
+                  <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', marginBottom: 8 }}>
+                    <span className="source-badge source-rule">📐 Rule Engine</span>
+                    <span>Used when confidence &gt; 82%. Fast, deterministic, no model needed.</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', marginBottom: 8 }}>
+                    <span className="source-badge source-ml">🧠 AI Model</span>
+                    <span>Kicks in when rule engine confidence is low (≤ 82%). Runs every 3rd frame for performance.</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text3)', padding: '7px 10px', background: 'rgba(0,0,0,.3)', borderRadius: 7 }}>
+                    Both sources are shown in the detection display with coloured indicators. ML results require &gt;55% model confidence to override rule results.
+                  </div>
+                </div>
+              </div>
+
+              {/* Model requirements */}
+              <div className="card">
+                <div className="ctitle">📋 Model Requirements</div>
+                <table className="data-table">
+                  <thead><tr><th>Property</th><th>Value</th></tr></thead>
+                  <tbody>
+                    <tr><td>Input shape</td><td style={{ color: 'var(--accent)' }}>[batch, 63]</td></tr>
+                    <tr><td>Output shape</td><td style={{ color: 'var(--accent)' }}>[batch, 36]</td></tr>
+                    <tr><td>Output activation</td><td style={{ color: 'var(--accent)' }}>softmax</td></tr>
+                    <tr><td>Classes (in order)</td><td style={{ color: 'var(--accent)', fontFamily: 'monospace', fontSize: 10 }}>A–Z (0–25), 0–9 (26–35)</td></tr>
+                    <tr><td>Format</td><td style={{ color: 'var(--accent)' }}>TensorFlow.js LayersModel (model.json)</td></tr>
+                    <tr><td>Inference frequency</td><td style={{ color: 'var(--accent)' }}>Every 3rd frame (~10 Hz at 30 FPS)</td></tr>
+                  </tbody>
+                </table>
+                <div style={{ marginTop: 11, fontSize: 11, color: 'var(--text3)' }}>
+                  Example Keras model architecture: Dense(128, relu) → Dropout(0.3) → Dense(64, relu) → Dense(36, softmax)
+                </div>
+              </div>
+
+              {/* Python training snippet */}
+              <div className="card">
+                <div className="ctitle">🐍 Python Training Snippet</div>
+                <pre style={{ fontSize: 10, color: 'var(--accent2)', background: 'rgba(0,0,0,.4)', padding: 12, borderRadius: 8, overflowX: 'auto', lineHeight: 1.7 }}>{`import pandas as pd
+from sklearn.preprocessing import LabelEncoder
+from tensorflow import keras
+
+df = pd.read_csv('asl_training_data.csv')
+X = df.drop('label', axis=1).values
+y = LabelEncoder().fit_transform(df['label'])
+
+model = keras.Sequential([
+    keras.layers.Dense(128, activation='relu', input_shape=(63,)),
+    keras.layers.Dropout(0.3),
+    keras.layers.Dense(64, activation='relu'),
+    keras.layers.Dense(36, activation='softmax')
+])
+model.compile(optimizer='adam',
+              loss='sparse_categorical_crossentropy',
+              metrics=['accuracy'])
+model.fit(X, y, epochs=50, validation_split=0.2)
+
+# Export to TF.js
+import tensorflowjs as tfjs
+tfjs.converters.save_keras_model(model, 'model/')`}</pre>
+              </div>
+            </div>
+          )}
+
+          {/* ═══ DATA COLLECT PAGE ═══ */}
+          {page === 'datacollect' && (
+            <div className="train-main-grid">
+              {/* Left: Camera + controls */}
+              <div className="col">
+                <CamPane />
+
+                <div className="card" style={{ border: isCollecting ? '1px solid var(--collect-color)' : undefined }}>
+                  <div className="ctitle">📊 Collection Controls</div>
+
+                  <div className="row" style={{ flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+                    <label style={{ fontSize: 12, color: 'var(--text2)' }}>Label:</label>
+                    <select className="label-select" value={collectLabel}
+                      onChange={e => { setCollectLabel(e.target.value); mlStore.currentLabel = e.target.value; }}
+                      disabled={isCollecting}>
+                      {ALPHABET.map(l => <option key={l} value={l}>{l}</option>)}
+                      {DIGITS.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                    <span className="sample-count-chip">{sampleCounts[collectLabel] || 0} samples</span>
+                  </div>
+
+                  <div className="sample-bar-wrap">
+                    <div className="sample-bar">
+                      <div className="sample-bar-fill"
+                        style={{ width: `${Math.min(100, ((sampleCounts[collectLabel] || 0) / 200) * 100)}%` }} />
+                    </div>
+                    <span style={{ fontSize: 10, color: 'var(--text3)', whiteSpace: 'nowrap' }}>
+                      {sampleCounts[collectLabel] || 0}/200
+                    </span>
+                  </div>
+
+                  <div className="row" style={{ marginTop: 12, flexWrap: 'wrap', gap: 6 }}>
+                    {!isCollecting
+                      ? <button className="btn btn-collect" onClick={startCollecting}>▶ Start Collecting</button>
+                      : <button className="btn btn-d" onClick={stopCollecting}>⏹ Stop</button>
+                    }
+                  </div>
+
+                  {isCollecting && (
+                    <div style={{ marginTop: 9, padding: '7px 10px', background: 'rgba(245,158,11,.1)', borderRadius: 8, fontSize: 12, color: 'var(--collect-color)' }}>
+                      🟡 Hold the sign for <strong>{collectLabel}</strong> clearly in view. Collecting at ~15 samples/sec.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right: Stats + download */}
+              <div className="col">
+                <div className="card">
+                  <div className="ctitle">📈 Dataset Summary
+                    <span className="sample-count-chip" style={{ marginLeft: 'auto' }}>{totalSamples} total</span>
+                  </div>
+
+                  <div style={{ maxHeight: 280, overflowY: 'auto' }}>
+                    <table className="data-table">
+                      <thead>
+                        <tr><th>Label</th><th>Samples</th><th>Progress</th></tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(sampleCounts).sort((a,b) => b[1]-a[1]).map(([lbl, cnt]) => (
+                          <tr key={lbl}>
+                            <td style={{ fontFamily: 'var(--font-head)', fontWeight: 700, color: 'var(--accent)', fontSize: 14 }}>{lbl}</td>
+                            <td style={{ fontWeight: 600 }}>{cnt}</td>
+                            <td style={{ width: 100 }}>
+                              <div className="sample-bar">
+                                <div className="sample-bar-fill" style={{ width: `${Math.min(100, (cnt/200)*100)}%` }} />
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                        {Object.keys(sampleCounts).length === 0 && (
+                          <tr><td colSpan="3" style={{ color: 'var(--text3)', textAlign: 'center', padding: 16 }}>No data collected yet</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* CSV preview */}
+                {totalSamples > 0 && (
+                  <div className="card">
+                    <div className="ctitle">📄 CSV Preview</div>
+                    <div className="csv-preview">
+                      f0,f1,f2,...,f62,label<br />
+                      {mlStore.trainingData.slice(0,2).map((r,i) => (
+                        <span key={i}>
+                          {r.features.slice(0,4).map(v => v.toFixed(3)).join(',')},…,{r.label}<br />
+                        </span>
+                      ))}
+                      {totalSamples > 2 && <span style={{ color: 'var(--text3)' }}>… {totalSamples - 2} more rows</span>}
+                    </div>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="card">
+                  <div className="ctitle">⬇ Export</div>
+                  <div className="col" style={{ gap: 7 }}>
+                    <button className="btn btn-g" onClick={handleDownloadCSV} disabled={totalSamples === 0}>
+                      ⬇ Download CSV ({totalSamples} samples)
+                    </button>
+                    <button className="btn btn-d btn-sm" onClick={clearTrainingData} disabled={totalSamples === 0}>
+                      🗑 Clear All Data
+                    </button>
+                    <div style={{ fontSize: 10, color: 'var(--text3)', lineHeight: 1.7 }}>
+                      Download the CSV and train a model in Python (see the AI/ML page), then load it back here. Aim for ~200 samples per label for good accuracy.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ═══ SIGN REFERENCE ═══ */}
+          {page === 'reference' && (
+            <div className="col">
+              <div className="card">
+                <div className="ctitle">📖 ASL Alphabet (A–Z)</div>
+                <div className="sign-ref-grid">
+                  {ALPHABET.map(l => (
+                    <div key={l} className="sign-ref-item" onClick={() => speak(l)}>
+                      <div className="sl">{l}</div>
+                      <div className="sd">{SIGN_EMOJI[l] || '🤚'}</div>
+                      <div style={{ fontSize: 8, color: 'var(--text3)', marginTop: 2, lineHeight: 1.3 }}>
+                        {SIGN_DESCRIPTIONS[l]?.split(',')[0]}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="card">
+                <div className="ctitle">🔢 Numbers (0–9)</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 5 }}>
+                  {DIGITS.map(d => (
+                    <div key={d} className="sign-ref-item" onClick={() => speak(d)}>
+                      <div className="sl">{d}</div>
+                      <div className="sd">{SIGN_EMOJI[d] || '🤚'}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="card">
+                <div className="ctitle">💡 Tips for Accurate Detection</div>
+                <ul style={{ color: 'var(--text2)', fontSize: 12, lineHeight: 2.1, paddingLeft: 16 }}>
+                  <li>Use front lighting — avoid sitting with a bright window behind you</li>
+                  <li>Keep hand 30–60 cm from camera, fully visible in frame</li>
+                  <li>Hold each sign still for ~1 second to register it</li>
+                  <li>Plain background improves accuracy</li>
+                  <li>Adjust <strong>Sensitivity</strong> in Settings if too many false detections</li>
+                  <li>Letters J and Z require movement — static frame shows I/Z approximation</li>
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {/* ═══ CONVERSATION ═══ */}
+          {page === 'conversation' && (
+            <div className="conv-grid">
+              <div className="col">
+                <CamPane mini />
+                <div className="big-out" style={{ padding: '12px 14px' }}>
+                  <div className={`big-letter ${cCls}`} style={{ fontSize: 58 }}>{stableResult.letter || '—'}</div>
+                  <div style={{ fontSize: 22 }}>{SIGN_EMOJI[stableResult.letter] || ''}</div>
+                  {stableResult.letter && <SourceBadge source={stableResult.source} />}
+                  <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 3 }}>{confPct}% · {stableResult.hand || 'No hand'}</div>
+                </div>
+                <div className="row" style={{ gap: 5, flexWrap: 'wrap' }}>
+                  <button className="btn btn-p btn-sm" onClick={() => {
+                    if (wordBuffer.length) {
+                      setMessages(m => [...m, { id: Date.now(), from: 'me', text: `[SIGN] ${wordBuffer.join('').trim()}`, time: new Date().toLocaleTimeString() }]);
+                      setWordBuf([]);
+                    }
+                  }}>📤 Send Sign</button>
+                  <button className="btn btn-s btn-sm" onClick={() => speak(wordBuffer.join('') || stableResult.letter)}>🔊</button>
+                  <button className="btn btn-s btn-sm" onClick={() => setWordBuf([])}>🗑</button>
+                </div>
+              </div>
+              <div className="card" style={{ display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
+                <div style={{ padding: '10px 13px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <div style={{ fontFamily: 'var(--font-head)', fontWeight: 700 }}>💬 Conversation</div>
+                  <div className="sp" />
+                  <div className="pill">{messages.length} msgs</div>
+                </div>
+                <div className="chat-msgs">
+                  {messages.map(m => (
+                    <div key={m.id} className={`msg ${m.from === 'me' ? 'me' : 'them'}`}>
+                      <div className="msg-bub">{m.text}</div>
+                      <div className="msg-meta">{m.time}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="chat-in-row">
+                  <input className="chat-in" placeholder="Type or let signs fill in…" value={chatIn}
+                    onChange={e => setChatIn(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && sendChat()} />
+                  <button className="btn btn-p btn-sm" onClick={sendChat}>Send</button>
+                  <button className="btn btn-s btn-sm" onClick={listening ? stopListen : startListen}>🎤</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ═══ CAPTIONS ═══ */}
+          {page === 'captions' && (
+            <div className="col">
+              <div className="row" style={{ flexWrap: 'wrap', gap: 7 }}>
+                <button className={`btn ${listening ? 'btn-d' : 'btn-p'}`} onClick={listening ? stopListen : startListen}>
+                  {listening ? '⏹ Stop' : '🎤 Start Live Captions'}
+                </button>
+                <button className="btn btn-s" onClick={saveTr} disabled={!transcript.length}>💾 Save</button>
+                <button className="btn btn-s" onClick={() => { setCapText(''); setTr([]); }}>🗑 Clear</button>
+                {listening && <div className="pill live">🔴 Listening…</div>}
+              </div>
+              <div className="cap-area">{capText || <div className="cap-ph">Captions appear here when you speak…</div>}</div>
+              <div className="card">
+                <div className="ctitle" style={{ justifyContent: 'space-between' }}>
+                  📜 Transcript ({transcript.length})
+                  <button className="btn btn-s btn-sm" onClick={saveTr} disabled={!transcript.length}>⬇ Download</button>
+                </div>
+                <div className="tr-box">
+                  {transcript.length === 0
+                    ? <div style={{ color: 'var(--text3)', fontSize: 12 }}>Transcript builds as you speak…</div>
+                    : transcript.map((t, i) => <div key={i} className="tr-line"><span>[{t.time}]</span>{t.text}</div>)
+                  }
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ═══ LEARNING ═══ */}
+          {page === 'learn' && (
+            <div className="learn-grid">
+              <div className="col">
+                <div className="score-row">
+                  <div className="score-box"><div className="score-n">{score}</div><div className="score-l">📊 Score</div></div>
+                  <div className="score-box"><div className="score-n" style={{ color: 'var(--warn)' }}>🔥{streak}</div><div className="score-l">Streak</div></div>
+                  <div className="score-box"><div className="score-n" style={{ color: 'var(--accent3)' }}>{doneLetters.length}</div><div className="score-l">Done</div></div>
+                </div>
+                <div className="card">
+                  <div className="ctitle">🎯 Practice Target</div>
+                  <div className="row" style={{ flexWrap: 'wrap', gap: 14 }}>
+                    <div style={{ fontFamily: 'var(--font-head)', fontSize: 72, fontWeight: 800, color: 'var(--accent)', textShadow: '0 0 26px var(--accent)' }}>{learnTarget}</div>
+                    <div style={{ fontSize: 48 }}>{SIGN_EMOJI[learnTarget] || '🤚'}</div>
+                    <div className="col" style={{ gap: 5 }}>
+                      <div style={{ fontSize: 11, color: 'var(--text2)' }}>Sign: <strong style={{ color: 'var(--accent)' }}>{learnTarget}</strong></div>
+                      <div style={{ fontSize: 10, color: 'var(--text3)' }}>{SIGN_DESCRIPTIONS[learnTarget]}</div>
+                      <button className="btn btn-p btn-sm" onClick={checkLearn}>✅ Check My Sign</button>
+                    </div>
+                  </div>
+                </div>
+                <div className={`fb-box ${feedback === 'ok' ? 'fb-ok' : feedback === 'no' ? 'fb-no' : 'fb-wait'}`}>
+                  {feedback === 'ok' && '🎉 Correct! Excellent!'}
+                  {feedback === 'no' && '❌ Not quite — check finger positions'}
+                  {feedback === 'wait' && '👋 Show the sign then press Check'}
+                </div>
+                <div className="card">
+                  <div className="ctitle">📡 Live Camera</div>
+                  {!cameraOn
+                    ? <button className="btn btn-p btn-sm" onClick={startCamera}>📷 Start Camera</button>
+                    : <div className="row">
+                        <span className="pulse" />
+                        <span style={{ fontSize: 12 }}>
+                          Detected: <strong style={{ color: confBarColor(confPct), fontFamily: 'var(--font-head)', fontSize: 20 }}>{stableResult.letter || '—'}</strong> · {confPct}%
+                        </span>
+                        {stableResult.letter && <SourceBadge source={stableResult.source} />}
+                      </div>
+                  }
+                </div>
+              </div>
+              <div className="col">
+                <div className="card">
+                  <div className="ctitle">🔡 A–Z Progress</div>
+                  <div className="ab-grid">
+                    {ALPHABET.map(l => (
+                      <button key={l} className={`ab-btn${doneLetters.includes(l) ? ' done' : ''}${l === learnTarget ? ' cur' : ''}`} onClick={() => setTarget(l)}>
+                        {l}
+                        {doneLetters.includes(l) && <span className="star">⭐</span>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="ctitle">🔢 0–9</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 4 }}>
+                    {DIGITS.map(d => (
+                      <button key={d} className={`ab-btn${d === learnTarget ? ' cur' : ''}`} onClick={() => setTarget(d)}>{d}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ═══ TRAINING ═══ */}
+          {page === 'train' && (
+            <div className="col" style={{ maxWidth: 680 }}>
+              <div className="card">
+                <div className="ctitle">🎯 Custom Gesture Training</div>
+                <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 13, lineHeight: 1.7 }}>
+                  Train SignSense on your own gestures. All data stays on your device.
+                </div>
+                {trainStep === 0 && (
+                  <div className="col">
+                    <label style={{ fontSize: 12, color: 'var(--text2)' }}>Gesture name:</label>
+                    <input className="chat-in" placeholder="e.g. Wave Hello, Thumbs Up…" value={trainName}
+                      onChange={e => setTName(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && trainName && setTStep(1)} />
+                    <button className="btn btn-p" onClick={() => trainName && setTStep(1)}>Next →</button>
+                  </div>
+                )}
+                {trainStep === 1 && (
+                  <div className="col">
+                    <div style={{ color: 'var(--text2)', fontSize: 13 }}>
+                      Capturing: <strong style={{ color: 'var(--accent)' }}>{trainName}</strong> · {trainSamples}/8 samples
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 7 }}>
+                      {[...Array(8)].map((_, i) => (
+                        <div key={i}
+                          style={{ aspectRatio: 1, background: i < trainSamples ? 'rgba(52,211,153,.1)' : 'var(--surface2)',
+                            border: `1px solid ${i < trainSamples ? 'var(--accent3)' : 'var(--border)'}`,
+                            borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 24, cursor: 'pointer', transition: 'all .12s' }}
+                          onClick={captureSample}>
+                          {i < trainSamples ? '✅' : '📸'}
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ height: 5, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', background: 'var(--accent)', width: `${trainSamples / 8 * 100}%`, transition: 'width .28s' }} />
+                    </div>
+                    <button className="btn btn-s btn-sm" onClick={() => { setTStep(0); setTName(''); setTSamp(0); }}>↩ Restart</button>
+                  </div>
+                )}
+                {trainStep === 2 && (
+                  <div className="col">
+                    <div className="fb-box fb-ok">✅ "{trainName}" trained with 8 samples — saved locally!</div>
+                    <button className="btn btn-p" onClick={() => { setTStep(0); setTName(''); setTSamp(0); }}>➕ Train Another</button>
+                  </div>
+                )}
+              </div>
+              {savedGestures.length > 0 && (
+                <div className="card">
+                  <div className="ctitle">💾 Saved Gestures ({savedGestures.length})</div>
+                  <div className="col" style={{ gap: 5 }}>
+                    {savedGestures.map((g, i) => (
+                      <div key={i} className="hist-item">
+                        <div style={{ fontFamily: 'var(--font-head)', fontWeight: 700 }}>🤚 {g.name}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text3)', marginLeft: 'auto' }}>{g.samples} samples · {g.date}</div>
+                        <button className="backspace-btn" onClick={() => {
+                          const ng = savedGestures.filter((_, j) => j !== i);
+                          setSaved(ng);
+                          localStorage.setItem('ss_gestures', JSON.stringify(ng));
+                        }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ═══ HISTORY ═══ */}
+          {page === 'history' && (
+            <div className="col">
+              <div className="row" style={{ flexWrap: 'wrap', gap: 7 }}>
+                <div className="pill">{history.length} detections</div>
+                <div className="pill" style={{ borderColor: 'var(--rule-color)', color: 'var(--rule-color)' }}>
+                  📐 Rule: {history.filter(h => h.source !== 'ml').length}
+                </div>
+                <div className="pill ml-active">
+                  🧠 AI: {history.filter(h => h.source === 'ml').length}
+                </div>
+                <button className="btn btn-s btn-sm" onClick={() => setHistory([])}>🗑 Clear</button>
+                <button className="btn btn-s btn-sm" onClick={() => {
+                  const t = history.map(h => `[${h.time}] ${h.letter} (${Math.round(h.conf * 100)}%) ${h.source} ${h.hand}`).join('\n');
+                  const b = new Blob([t], { type: 'text/plain' });
+                  const a = document.createElement('a'); a.href = URL.createObjectURL(b);
+                  a.download = 'signsense_history.txt'; a.click();
+                }}>⬇ Export</button>
+              </div>
+              {history.length === 0
+                ? <div style={{ color: 'var(--text3)', fontSize: 13, padding: 40, textAlign: 'center' }}>📂 No history yet.</div>
+                : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: 8 }}>
+                    {history.map((h, i) => {
+                      const cp = Math.round(h.conf * 100);
+                      return (
+                        <div key={i} className="card" style={{ textAlign: 'center', padding: '12px 9px' }}>
+                          <div style={{ fontFamily: 'var(--font-head)', fontSize: 46, fontWeight: 800, color: confBarColor(cp) }}>{h.letter}</div>
+                          <div style={{ fontSize: 26 }}>{SIGN_EMOJI[h.letter] || ''}</div>
+                          <SourceBadge source={h.source} />
+                          <div className="conf-bar" style={{ margin: '5px 0' }}>
+                            <div className="conf-fill" style={{ width: `${cp}%`, background: confBarColor(cp) }} />
+                          </div>
+                          <div style={{ fontSize: 10, color: 'var(--text3)' }}>{h.hand} · {cp}%</div>
+                          <div style={{ fontSize: 9, color: 'var(--text3)', marginTop: 2 }}>{h.time}</div>
+                          <button className="btn btn-s btn-sm" style={{ marginTop: 6, width: '100%' }} onClick={() => speak(h.letter)}>🔊</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+              }
+            </div>
+          )}
+
+          {/* ═══ SETTINGS ═══ */}
+          {page === 'settings' && (
+            <div className="set-grid">
+              <div className="card">
+                <div className="ctitle">🎛 Detection</div>
+                <div className="set-row">
+                  <div><div className="set-lbl">Sensitivity Threshold</div><div className="set-sub">Higher = stricter</div></div>
+                  <div className="row" style={{ gap: 7 }}>
+                    <input type="range" min="30" max="95" value={sens} onChange={e => setSens(+e.target.value)}
+                      style={{ width: 90, accentColor: 'var(--accent)' }} />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)', minWidth: 30 }}>{sens}%</span>
+                  </div>
+                </div>
+                <div className="set-row">
+                  <div><div className="set-lbl">Hand Skeleton Overlay</div><div className="set-sub">Draw joints on camera</div></div>
+                  <button className={`toggle${overlay ? ' on' : ''}`} onClick={() => setOverlay(v => !v)} />
+                </div>
+                <div className="set-row">
+                  <div><div className="set-lbl">Show FPS Counter</div></div>
+                  <button className={`toggle${showFps ? ' on' : ''}`} onClick={() => setShowFps(v => !v)} />
+                </div>
+                <div className="set-row">
+                  <div><div className="set-lbl">Debug Mode</div><div className="set-sub">Show raw prediction log</div></div>
+                  <button className={`toggle${debugMode ? ' on' : ''}`} onClick={() => setDebugMode(v => !v)} />
+                </div>
+              </div>
+
+              <div className="card">
+                <div className="ctitle">🧠 AI Model</div>
+                <div className="set-row">
+                  <div><div className="set-lbl">Enable AI Model</div><div className="set-sub">Use ML fallback when rule confidence is low</div></div>
+                  <button className={`toggle${mlEnabled ? ' on' : ''}`} onClick={() => setMlEnabled(e => !e)} disabled={!mlLoaded} />
+                </div>
+                <div className="set-row">
+                  <div><div className="set-lbl">Model Status</div></div>
+                  <span className={`model-status ${mlLoaded ? 'model-loaded' : 'model-not-loaded'}`} style={{ fontSize: 10 }}>
+                    {mlLoaded ? '✓ Loaded' : '○ Not Loaded'}
+                  </span>
+                </div>
+                {!mlLoaded && (
+                  <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text3)' }}>
+                    Go to the 🧠 AI/ML page to load a TensorFlow.js model.
+                  </div>
+                )}
+              </div>
+
+              <div className="card">
+                <div className="ctitle">🔊 Audio & Display</div>
+                <div className="set-row">
+                  <div><div className="set-lbl">Text-to-Speech</div><div className="set-sub">Read detected signs aloud</div></div>
+                  <button className={`toggle${ttsOn ? ' on' : ''}`} onClick={() => setTts(t => !t)} />
+                </div>
+                <div className="set-row">
+                  <div><div className="set-lbl">High Contrast UI</div></div>
+                  <button className={`toggle${hc ? ' on' : ''}`} onClick={() => setHc(h => !h)} />
+                </div>
+              </div>
+
+              <div className="card">
+                <div className="ctitle">ℹ️ About</div>
+                <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 2 }}>
+                  <div>Engine: <strong style={{ color: 'var(--accent)' }}>MediaPipe Hands v0.4</strong></div>
+                  <div>Recognition: <strong>Hybrid Rule + TF.js ML</strong></div>
+                  <div>Smoothing: <strong>4-frame moving average</strong></div>
+                  <div>ML Inference: <strong>Every 3rd frame (≈10 Hz)</strong></div>
+                  <div>Mode: 🟢 Offline Ready</div>
+                  <div>Privacy: 🔐 100% local</div>
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <button className="btn btn-d btn-sm" onClick={() => {
+                    setHistory([]); setTr([]); setSaved([]); localStorage.clear();
+                    mlStore.trainingData = []; setTotalSamples(0); setSampleCounts({});
+                    showAlert('All data cleared', 'ok');
+                  }}>🗑 Clear All Data</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
+
+      {/* Alert Toast */}
+      {alert && (
+        <div className={`alert-pop ${alert.type}`} onClick={() => setAlert(null)}>{alert.msg}</div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
